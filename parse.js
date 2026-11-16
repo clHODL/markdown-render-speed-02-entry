@@ -806,6 +806,11 @@ function inlineParse(s, refs) {
       let found = -1;
       let k = i + run;
       while (k < n) {
+        // A multi-backtick code span must not swallow the ']' that
+        // closes the link text we are inside: the link forms and the
+        // backticks stay literal. Single-backtick spans may cross
+        // ']' (cm-342/525/537).
+        if (run >= 2 && s[k] === ']' && stack.length > 0 && (s[k + 1] === '(' || s[k + 1] === '[')) break;
         if (s[k] === '`') {
           let r2 = 0;
           while (k + r2 < n && s[k + r2] === '`') r2 += 1;
