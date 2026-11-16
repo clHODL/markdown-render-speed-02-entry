@@ -528,6 +528,8 @@ function tryExtAutolink(s, i, prev, nodes, inBracket) {
   // stays plain text and the outer link forms around it. Explicit
   // <...> autolinks still nest (handled by scanAutolink).
   if (inBracket) return null;
+  // Nor after an opening <a> tag anywhere earlier in the document.
+  if (bareAutolinkOff) return null;
   // The character before must not be a word char or a char that continues
   // the link (so we do not link the tail of a longer word).
   if (prev && (isAlphaNum(prev) || prev === '_' || prev === '-' || prev === '.' || prev === '/' || prev === ':')) return null;
@@ -886,7 +888,16 @@ function inlineParse(s, refs) {
         continue;
       }
       const tag = scanHtmlTag(s, i);
-      if (tag) { flush(); nodes.push({ t: 'html', s: tag.text }); i += tag.len; continue; }
+      if (tag) {
+        flush();
+        // An opening <a> tag (even self-closing) turns bare autolinks
+        // off until a closing </a> tag is seen. But <a/> (slash tight
+        // against the name) does not: only <a>, <a ...> and <a ... />
+        // with whitespace after the name count.
+        if (/^<a[\s>]/i.test(tag.text)) bareAutolinkOff = true;
+        else if (/^<\/a[\s>]/i.test(tag.text)) bareAutolinkOff = false;
+        nodes.push({ t: 'html', s: tag.text }); i += tag.len; continue;
+      }
       buf += '<'; i += 1; continue;
     }
     if (c === '&') {
@@ -2007,8 +2018,15 @@ function renderBlock(b, refs, isLast) {
 // Entry point
 // ---------------------------------------------------------------------------
 
+// Once an opening <a> tag is seen in inline content, marked stops
+// forming bare (extended) autolinks until a closing </a> tag is seen.
+// Regular [text](url) links and explicit <...> autolinks are
+// unaffected. Reset per parse().
+let bareAutolinkOff = false;
+
 export function parse(markdown) {
   if (markdown === '') return '';
+  bareAutolinkOff = false;
   const src = markdown.replace(/\r\n?/g, '\n');
   let lines = src.split('\n');
   const endsWithNL = src.endsWith('\n');
