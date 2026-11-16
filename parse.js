@@ -883,21 +883,22 @@ function inlineParse(s, refs) {
         i += 1;
         continue;
       }
-      // A link whose text holds both an emphasis delimiter and a code
-      // span containing a backtick does not form (marked's bracket
-      // scanner loses the closing bracket in that combination).
-      let hasBacktickCode = false, hasDelim = false;
-      const scanLinkText = (list) => {
-        for (const nd of list) {
-          if (nd.t === 'code' && nd.s.includes('`')) hasBacktickCode = true;
-          if (nd.t === 'delim' && (nd.ch === '*' || nd.ch === '_')) hasDelim = true;
-          if (nd.children) scanLinkText(nd.children);
+      // A link whose text holds a code span containing a backtick,
+      // followed by more text before the ']', does not form (marked's
+      // bracket scanner loses the closing bracket in that combination).
+      // A backtick code span at the very end of the text is fine.
+      let hasBacktickCode = false, hasNodeAfter = false;
+      const linkTextNodes = nodes.slice(opener.idx + 1);
+      for (let k = 0; k < linkTextNodes.length; k++) {
+        const nd = linkTextNodes[k];
+        if (nd.t === 'code' && nd.s.includes('`')) {
+          hasBacktickCode = true;
+          if (k + 1 < linkTextNodes.length) hasNodeAfter = true;
         }
-      };
-      scanLinkText(nodes.slice(opener.idx + 1));
-      if (hasBacktickCode && hasDelim) {
-        // The link does not form, and neither does the emphasis around
-        // the code span: the delimiters stay literal.
+      }
+      if (hasBacktickCode && hasNodeAfter) {
+        // The link does not form, and neither does any emphasis in
+        // the text: the delimiters stay literal.
         for (let k = opener.idx + 1; k < nodes.length; k++) {
           const nd = nodes[k];
           if (nd.t === 'delim' && (nd.ch === '*' || nd.ch === '_')) {
