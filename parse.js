@@ -773,6 +773,16 @@ function inlineParse(s, refs) {
   let buf = '';
   let i = 0;
   const n = s.length;
+  // After a multi-backtick code span fails because its closer search hit
+  // a link-closing ']', the backtick run before that ']' is literal text
+  // (it was the failed span's intended closer), not a new span opener.
+  // noCodeUntil is the index of that ']'; -1 when inactive.
+  let noCodeUntil = -1;
+  // A link whose text held an unterminated multi-backtick span poisons
+  // a later emphasis in the same paragraph when a code span follows
+  // that emphasis (marked leaves the emphasis literal). Set to the
+  // link node when such a link forms; null otherwise.
+  let poisonLink = null;
 
   function flush() {
     if (buf) { nodes.push({ t: 'text', s: buf }); buf = ''; }
@@ -803,6 +813,7 @@ function inlineParse(s, refs) {
       // Code span: count the run, find a matching run.
       let run = 0;
       while (i + run < n && s[i + run] === '`') run += 1;
+      if (i < noCodeUntil) { buf += '`'.repeat(run); i += run; continue; }
       let found = -1;
       let k = i + run;
       while (k < n) {
@@ -810,7 +821,7 @@ function inlineParse(s, refs) {
         // closes the link text we are inside: the link forms and the
         // backticks stay literal. Single-backtick spans may cross
         // ']' (cm-342/525/537).
-        if (run >= 2 && s[k] === ']' && stack.length > 0 && (s[k + 1] === '(' || s[k + 1] === '[')) break;
+        if (run >= 2 && s[k] === ']' && stack.length > 0 && (s[k + 1] === '(' || s[k + 1] === '[')) { noCodeUntil = k; break; }
         if (s[k] === '`') {
           let r2 = 0;
           while (k + r2 < n && s[k + r2] === '`') r2 += 1;
@@ -904,6 +915,9 @@ function inlineParse(s, refs) {
         ? { t: 'img', src: tail.href, title: tail.title, children }
         : { t: 'link', href: tail.href, title: tail.title, children };
       nodes.splice(startIdx, nodes.length - startIdx, node);
+      // This ']' stopped a multi-backtick code-span search, so the
+      // link text holds an unterminated multi-backtick span.
+      if (noCodeUntil === i && !opener.image) poisonLink = node;
       // Drop any openers that were inside the new link/image.
       while (stack.length && stack[stack.length - 1].idx > opener.idx) stack.pop();
       stack.pop();
@@ -1016,7 +1030,7 @@ function inlineParse(s, refs) {
     i += 1;
   }
   flush();
-  processEmphasis(nodes);
+  processEmphasis(nodes, poisonLink);
   return nodes;
 }
 
@@ -1040,12 +1054,26 @@ function mkDelim(ch, len, before, after) {
 
 // --- Emphasis / strikethrough (CommonMark appendix A) -----------------------
 
-function processEmphasis(nodes) {
+function processEmphasis(nodes, poisonLink = null) {
   // Resolve emphasis inside link/image children first (their delimiters
   // cannot match delimiters outside the link).
   for (const nd of nodes) {
     if ((nd.t === 'link' || nd.t === 'img') && nd.children) processEmphasis(nd.children);
   }
+  // If a link in this paragraph held an unterminated multi-backtick
+  // span, an emphasis after that link does not form when a code span
+  // follows the emphasis. The link's index is recomputed on every
+  // check: emphasis formation splices nodes, so a cached index goes
+  // stale.
+  const poisoned = (closerIdx) => {
+    if (!poisonLink) return false;
+    const linkIdx = nodes.indexOf(poisonLink);
+    if (linkIdx < 0 || closerIdx <= linkIdx) return false;
+    for (let k = closerIdx + 1; k < nodes.length; k++) {
+      if (nodes[k].t === 'code') return true;
+    }
+    return false;
+  };
   const openers = [];
   let i = 0;
   while (i < nodes.length) {
@@ -1060,6 +1088,9 @@ function processEmphasis(nodes) {
           const eitherBoth = (o.canOpen && o.canClose) || (nd.canOpen && nd.canClose);
           if (eitherBoth && (o.len + nd.len) % 3 === 0 && !((o.len % 3 === 0) && (nd.len % 3 === 0))) continue;
         }
+        // Poisoned paragraph: a link with an unterminated multi-backtick
+        // span came before this emphasis, and a code span follows it.
+        if (poisoned(i)) continue;
         const use = o.len >= 2 && nd.len >= 2 ? 2 : 1;
         const oIdx = nodes.indexOf(o);
         const children = nodes.slice(oIdx + 1, i);
