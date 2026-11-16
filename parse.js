@@ -1735,7 +1735,12 @@ function parseBlocks(lines, nl, refs, forceCont, inList) {
             const m = new RegExp('^\\' + ch + '{' + len + ',}[ \\t]*$').exec(r);
             if (m) { closed = true; break; }
           }
-          content.push({ line: stripFenceLine(l, ind.col), nl: nl[j] });
+          // A tilde fence does not strip its content at all; a backtick
+          // fence strips by its indent (but only the first 3 columns
+          // count as fence indent — a further-indented backtick fence
+          // strips only the excess over 3).
+          const stripN = ch === '~' ? 0 : (ind.col <= 3 ? ind.col : ind.col - 3);
+          content.push({ line: stripFenceLine(l, stripN), nl: nl[j] });
           j += 1;
         }
         // A single trailing empty line before the closing fence is not
