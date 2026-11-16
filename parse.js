@@ -977,7 +977,7 @@ function mkDelim(ch, len, before, after) {
     canOpen = leftFlanking;
     canClose = rightFlanking;
   }
-  return { t: 'delim', ch, len, canOpen, canClose };
+  return { t: 'delim', ch, len, canOpen, canClose, before, after };
 }
 
 // --- Emphasis / strikethrough (CommonMark appendix A) -----------------------
@@ -1005,8 +1005,29 @@ function processEmphasis(nodes) {
         const use = o.len >= 2 && nd.len >= 2 ? 2 : 1;
         const oIdx = nodes.indexOf(o);
         const children = nodes.slice(oIdx + 1, i);
+        // A strong whose opener was preceded by whitespace and whose
+        // closer is followed by a letter blocks an outer single-'*'
+        // em from forming around it (marked leaves the outer '*'s
+        // literal in that case).
+        if (use === 1 && nd.ch === '*') {
+          let blocked = false;
+          const scan = (list) => {
+            for (const c of list) {
+              if (c.t === 'strong' && c.blockOuter) { blocked = true; return; }
+              if (c.children) scan(c.children);
+              if (blocked) return;
+            }
+          };
+          scan(children);
+          if (blocked) continue;
+        }
         const wrap = { t: use === 2 ? 'strong' : 'em', children };
         if (nd.ch === '~') wrap.t = 'del';
+        if (use === 2) {
+          const openPrevWs = o.before === '' || isWhitespace(o.before);
+          const closeNextLetter = nd.after !== '' && !isWhitespace(nd.after) && /\p{L}/u.test(nd.after);
+          if (openPrevWs && closeNextLetter) wrap.blockOuter = true;
+        }
         o.len -= use;
         nd.len -= use;
         const repl = [];
