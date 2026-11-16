@@ -1094,6 +1094,25 @@ function processEmphasis(nodes, poisonLink = null) {
           const eitherBoth = (o.canOpen && o.canClose) || (nd.canOpen && nd.canClose);
           if (eitherBoth && (o.len + nd.len) % 3 === 0 && !((o.len % 3 === 0) && (nd.len % 3 === 0))) continue;
         }
+        // Reserve a '**' opener for its '**' closer: a single-'*'
+        // closer does not match a '**' opener when an inner em has
+        // already formed between them and a '**' closer follows
+        // (q1 '**foo *bar*baz* qux**' forms a strong, not an outer em).
+        if (nd.ch === '*' && nd.len === 1 && o.len >= 2) {
+          const oIdx0 = nodes.indexOf(o);
+          let laterStrong = false;
+          for (let k = i + 1; k < nodes.length; k++) {
+            const nk = nodes[k];
+            if (nk.t === 'delim' && nk.ch === '*' && nk.len >= 2 && nk.canClose) { laterStrong = true; break; }
+          }
+          if (laterStrong) {
+            let innerEm = false;
+            for (let k = oIdx0 + 1; k < i; k++) {
+              if (nodes[k].t === 'em') { innerEm = true; break; }
+            }
+            if (innerEm) continue;
+          }
+        }
         // Poisoned paragraph: a link with an unterminated multi-backtick
         // span came before this emphasis, and a code span follows it.
         if (poisoned(i)) continue;
