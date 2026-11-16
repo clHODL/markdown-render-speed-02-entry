@@ -1098,8 +1098,8 @@ function processEmphasis(nodes, poisonLink = null) {
         // closer does not match a '**' opener when an inner em has
         // already formed between them and a '**' closer follows
         // (q1 '**foo *bar*baz* qux**' forms a strong, not an outer em).
+        const oIdx = nodes.indexOf(o);
         if (nd.ch === '*' && nd.len === 1 && o.len >= 2) {
-          const oIdx0 = nodes.indexOf(o);
           let laterStrong = false;
           for (let k = i + 1; k < nodes.length; k++) {
             const nk = nodes[k];
@@ -1107,7 +1107,7 @@ function processEmphasis(nodes, poisonLink = null) {
           }
           if (laterStrong) {
             let innerEm = false;
-            for (let k = oIdx0 + 1; k < i; k++) {
+            for (let k = oIdx + 1; k < i; k++) {
               if (nodes[k].t === 'em') { innerEm = true; break; }
             }
             if (innerEm) continue;
@@ -1117,7 +1117,6 @@ function processEmphasis(nodes, poisonLink = null) {
         // span came before this emphasis, and a code span follows it.
         if (poisoned(i)) continue;
         const use = o.len >= 2 && nd.len >= 2 ? 2 : 1;
-        const oIdx = nodes.indexOf(o);
         const children = nodes.slice(oIdx + 1, i);
         // A strong whose opener was preceded by whitespace and whose
         // closer is followed by a letter blocks an outer single-'*'
