@@ -431,7 +431,9 @@ function trimAutolinkTail(link) {
       let open = 0, close = 0;
       for (let k = 0; k < end; k++) {
         if (link[k] === '(') open += 1;
-        else if (link[k] === ')') close += 1;
+        // A ')' immediately followed by ']' is a structural close of a
+        // link destination, not part of this URL's paren balance.
+        else if (link[k] === ')' && link[k + 1] !== ']') close += 1;
       }
       if (close > open) { end -= 1; continue; }
     }
@@ -463,6 +465,21 @@ function scanUriTail(s, i, inBracket) {
     const c = s[j];
     if (c === ' ' || c === '\t' || c === '\n' || c === '<') break;
     if (inBracket && c === ']') break;
+    // Outside link text, a ']' followed by '(' ends the URL (the ']'
+    // is the URL's last char) — but only when the '(' opens a group
+    // that contains whitespace (a fresh link destination, not part of
+    // this URL); a tight '(...)' group stays part of the URL.
+    if (!inBracket && c === ']' && s[j + 1] === '(') {
+      let depth = 0, k = j + 1, hasWs = false;
+      while (k < s.length) {
+        const d = s[k];
+        if (d === ' ' || d === '\t' || d === '\n') { hasWs = true; break; }
+        if (d === '(') depth += 1;
+        else if (d === ')') { depth -= 1; if (depth === 0) break; }
+        k += 1;
+      }
+      if (hasWs) { j += 1; break; }
+    }
     j += 1;
   }
   return s.slice(i, j);
