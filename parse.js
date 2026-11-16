@@ -1127,8 +1127,24 @@ function processEmphasis(nodes, poisonLink = null) {
         nd.len -= use;
         const repl = [];
         if (o.len > 0) repl.push(o);
+        // A leftover '*' from a '***' strong closer belongs inside the
+        // strong when the strong holds an inner em and no earlier opener
+        // could consume it (doc-11/30); otherwise it stays outside
+        // (cm-446 '**foo***').
+        let leftoverInside = false;
+        if (use === 2 && nd.len > 0 && nd.ch === '*' && j === 0) {
+          const hasInnerEm = (list) => {
+            for (const c of list) {
+              if (c.t === 'em') return true;
+              if (c.children && hasInnerEm(c.children)) return true;
+            }
+            return false;
+          };
+          if (hasInnerEm(wrap.children)) leftoverInside = true;
+        }
+        if (leftoverInside) wrap.children.push({ t: 'text', s: nd.ch.repeat(nd.len) });
         repl.push(wrap);
-        if (nd.len > 0) repl.push(nd);
+        if (nd.len > 0 && !leftoverInside) repl.push(nd);
         nodes.splice(oIdx, i - oIdx + 1, ...repl);
         // Openers at or after o now live inside the new node: drop them.
         openers.length = j;
