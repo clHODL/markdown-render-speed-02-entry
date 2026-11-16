@@ -501,19 +501,26 @@ function domainPrefix(s) {
 // delimiter is seen as a delimiter.
 function trimCloserRun(link, nodes) {
   if (!nodes) return link;
-  for (const ch of ['_', '*', '~']) {
-    if (!link.endsWith(ch)) continue;
-    let open = false;
-    for (let k = nodes.length - 1; k >= 0; k--) {
-      const nd = nodes[k];
-      if (nd.t === 'delim' && nd.ch === ch && nd.canOpen) { open = true; break; }
+  // A URL may end in several stacked closers (e.g. '*__' closing an em
+  // and a strong): trim them one run at a time until none applies.
+  for (;;) {
+    let trimmed = false;
+    for (const ch of ['_', '*', '~']) {
+      if (!link.endsWith(ch)) continue;
+      let open = false;
+      for (let k = nodes.length - 1; k >= 0; k--) {
+        const nd = nodes[k];
+        if (nd.t === 'delim' && nd.ch === ch && nd.canOpen) { open = true; break; }
+      }
+      if (!open) continue;
+      let cut = 0;
+      while (cut < link.length && link[link.length - 1 - cut] === ch) cut += 1;
+      link = trimAutolinkTail(link.slice(0, link.length - cut));
+      trimmed = true;
+      break;
     }
-    if (!open) continue;
-    let cut = 0;
-    while (cut < link.length && link[link.length - 1 - cut] === ch) cut += 1;
-    return trimAutolinkTail(link.slice(0, link.length - cut));
+    if (!trimmed) return link;
   }
-  return link;
 }
 
 function tryExtAutolink(s, i, prev, nodes, inBracket) {
@@ -944,6 +951,15 @@ function inlineParse(s, refs) {
         const oIdx = stack[stack.length - 1].idx;
         for (let k = oIdx + 1; k < nodes.length; k++) {
           if (nodes[k].t === 'link' && !nodes[k].auto) { inBracket = false; break; }
+        }
+        // If the bracket cannot become a link at all (its label is
+        // undefined and no inline destination follows), its content is
+        // ordinary text and autolinks form there.
+        if (inBracket) {
+          const top = stack[stack.length - 1];
+          const lab = scanLabel(s, top.src);
+          if (!lab) inBracket = false;
+          else if (!parseLinkTail(s, lab.end, lab.label, refs)) inBracket = false;
         }
       }
       const ext = tryExtAutolink(s, i, prev, nodes, inBracket);
