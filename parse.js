@@ -2081,12 +2081,19 @@ function renderBlock(b, refs, isLast) {
         const blocks = it.blocks;
         // In a tight list every paragraph is rendered as bare inline
         // content (no <p> tags); in a loose list every paragraph keeps
-        // its <p> tags.
-        for (let t = 0; t < blocks.length; t++) {
-          const blk = blocks[t];
-          if (!b.loose && blk.k === 'para') inner += inline(blk.text, refs);
-          else inner += renderBlock(blk, refs, itemLast && t === blocks.length - 1);
-        }
+        // its <p> tags. A task item's first paragraph is rendered
+        // exactly once: the checkbox form replaces the plain form,
+        // it must not be rendered twice (the second render would see
+        // a stale <a>-state from later blocks).
+        const renderAll = () => {
+          let s = '';
+          for (let t = 0; t < blocks.length; t++) {
+            const blk = blocks[t];
+            if (!b.loose && blk.k === 'para') s += inline(blk.text, refs);
+            else s += renderBlock(blk, refs, itemLast && t === blocks.length - 1);
+          }
+          return s;
+        };
         if (it.task !== null) {
           const input = it.task === 'x'
             ? '<input checked="" disabled="" type="checkbox">'
@@ -2094,8 +2101,11 @@ function renderBlock(b, refs, isLast) {
           if (b.loose && blocks.length > 0 && blocks[0].k === 'para') {
             inner = '<p>' + input + ' ' + inline(blocks[0].text, refs) + '</p>\n' + blocks.slice(1).map((blk, idx) => renderBlock(blk, refs, itemLast && idx + 1 === blocks.length - 1)).join('');
           } else {
+            inner = renderAll();
             inner = input + (inner ? ' ' + inner : '');
           }
+        } else {
+          inner = renderAll();
         }
         out += '<li>' + inner + '</li>\n';
       }
