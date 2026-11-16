@@ -1495,6 +1495,10 @@ function splitTableRow(line) {
       let found = -1;
       let k = i + run;
       while (k < n) {
+        // A code span cannot cross a cell boundary: an unescaped '|'
+        // ends the search (the span is unterminated in this cell).
+        if (line[k] === '\\' && k + 1 < n) { k += 2; continue; }
+        if (line[k] === '|') break;
         if (line[k] === '`') {
           let r2 = 0;
           while (k + r2 < n && line[k + r2] === '`') r2 += 1;
