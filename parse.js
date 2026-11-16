@@ -1712,9 +1712,10 @@ function collectBlockquote(lines, nl, i) {
   while (j < N) {
     const l = lines[j];
     const ind = leadingIndent(l);
-    // A '>' line: up to 3 columns of indent, or a single tab before
-    // the '>' (which counts as at most 3 columns of indent).
-    if ((ind.col <= 3 || (l[0] === '\t' && l[1] === '>')) && l.slice(ind.idx).startsWith('>')) {
+    // A '>' line: up to 3 columns of indent. A tab before '>' is 4
+    // columns, so at top level it is indented code, not a blockquote
+    // (inside a list item the container strip has already reduced it).
+    if (ind.col <= 3 && l.slice(ind.idx).startsWith('>')) {
       gtIndent = ind.col;
       const gtIdx = ind.idx;
       const after = l[gtIdx + 1];
@@ -1794,10 +1795,9 @@ function parseBlocks(lines, nl, refs, forceCont, inList) {
     const ind = leadingIndent(line);
     const rest = line.slice(ind.idx);
 
-    // Indented code. A single tab before a '>' is a blockquote marker,
-    // not indented code (the tab counts as at most 3 columns of indent
-    // before a blockquote).
-    if (ind.col >= 4 && !(line[0] === '\t' && line[1] === '>')) {
+    // Indented code (indent >= 4 columns). A tab before '>' is 4
+    // columns, so it is indented code, not a blockquote marker.
+    if (ind.col >= 4) {
       const content = [];
       let j = i;
       while (j < N) {
