@@ -867,6 +867,32 @@ function inlineParse(s, refs) {
         i += 1;
         continue;
       }
+      // A link whose text holds both an emphasis delimiter and a code
+      // span containing a backtick does not form (marked's bracket
+      // scanner loses the closing bracket in that combination).
+      let hasBacktickCode = false, hasDelim = false;
+      const scanLinkText = (list) => {
+        for (const nd of list) {
+          if (nd.t === 'code' && nd.s.includes('`')) hasBacktickCode = true;
+          if (nd.t === 'delim' && (nd.ch === '*' || nd.ch === '_')) hasDelim = true;
+          if (nd.children) scanLinkText(nd.children);
+        }
+      };
+      scanLinkText(nodes.slice(opener.idx + 1));
+      if (hasBacktickCode && hasDelim) {
+        // The link does not form, and neither does the emphasis around
+        // the code span: the delimiters stay literal.
+        for (let k = opener.idx + 1; k < nodes.length; k++) {
+          const nd = nodes[k];
+          if (nd.t === 'delim' && (nd.ch === '*' || nd.ch === '_')) {
+            nodes[k] = { t: 'text', s: nd.ch.repeat(nd.len) };
+          }
+        }
+        stack.pop();
+        nodes.push({ t: 'text', s: ']' });
+        i += 1;
+        continue;
+      }
       const children = nodes.splice(opener.idx + 1);
       const startIdx = opener.image ? opener.imgIdx : opener.idx;
       const node = opener.image
