@@ -1069,10 +1069,15 @@ function processEmphasis(nodes, poisonLink = null) {
     if (!poisonLink) return false;
     const linkIdx = nodes.indexOf(poisonLink);
     if (linkIdx < 0 || closerIdx <= linkIdx) return false;
-    for (let k = closerIdx + 1; k < nodes.length; k++) {
-      if (nodes[k].t === 'code') return true;
-    }
-    return false;
+    // A code span counts even when it sits inside a later link/image.
+    const hasCode = (list) => {
+      for (const nd of list) {
+        if (nd.t === 'code') return true;
+        if (nd.children && hasCode(nd.children)) return true;
+      }
+      return false;
+    };
+    return hasCode(nodes.slice(closerIdx + 1));
   };
   const openers = [];
   let i = 0;
